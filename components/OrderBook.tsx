@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { Project, ProjectStatus, ProjectCategory, TeamMember, ProjectTemplate, Task } from '../types';
 import { PROJECT_TEMPLATES } from '../constants';
 
@@ -13,6 +14,13 @@ const OrderBook: React.FC<OrderBookProps> = ({ projects, team, onAddProject, onU
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [entryMode, setEntryMode] = useState<'template' | 'manual'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
+  
+  // Filter States
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     ownerId: team[0]?.id || '',
@@ -21,6 +29,28 @@ const OrderBook: React.FC<OrderBookProps> = ({ projects, team, onAddProject, onU
     description: '',
     status: ProjectStatus.PENDING
   });
+
+  const clearFilters = () => {
+    setFilterSearch('');
+    setFilterOwner('');
+    setFilterCategory('');
+    setFilterStatus('');
+  };
+
+  const isFiltered = filterSearch !== '' || filterOwner !== '' || filterCategory !== '' || filterStatus !== '';
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter(project => {
+      const matchSearch = !filterSearch || 
+        project.name.toLowerCase().includes(filterSearch.toLowerCase()) || 
+        project.description.toLowerCase().includes(filterSearch.toLowerCase());
+      const matchOwner = !filterOwner || project.ownerId === filterOwner;
+      const matchCategory = !filterCategory || project.category === filterCategory;
+      const matchStatus = !filterStatus || project.status === filterStatus;
+      
+      return matchSearch && matchOwner && matchCategory && matchStatus;
+    });
+  }, [projects, filterSearch, filterOwner, filterCategory, filterStatus]);
 
   const handleTemplateSelect = (templateId: string) => {
     const tpl = PROJECT_TEMPLATES.find(t => t.id === templateId) || null;
@@ -111,6 +141,63 @@ const OrderBook: React.FC<OrderBookProps> = ({ projects, team, onAddProject, onU
         </button>
       </div>
 
+      {/* Filter Bar */}
+      <div className="bg-white border border-gray-200 rounded-3xl p-4 shadow-sm flex flex-wrap items-center gap-4">
+        <div className="flex-1 min-w-[240px] relative">
+          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+          <input 
+            type="text" 
+            placeholder="Search projects..."
+            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-black"
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="min-w-[160px]">
+          <select 
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-black appearance-none cursor-pointer"
+            value={filterOwner}
+            onChange={(e) => setFilterOwner(e.target.value)}
+          >
+            <option value="">All Owners</option>
+            {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+
+        <div className="min-w-[140px]">
+          <select 
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-black appearance-none cursor-pointer"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+          >
+            <option value="">All Categories</option>
+            {Object.values(ProjectCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+        </div>
+
+        <div className="min-w-[140px]">
+          <select 
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-black appearance-none cursor-pointer"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            {Object.values(ProjectStatus).map(status => <option key={status} value={status}>{status}</option>)}
+          </select>
+        </div>
+
+        {isFiltered && (
+          <button 
+            onClick={clearFilters}
+            className="px-4 py-3 text-sm font-black text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors flex items-center gap-2"
+          >
+            <i className="fas fa-times"></i>
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -123,54 +210,62 @@ const OrderBook: React.FC<OrderBookProps> = ({ projects, team, onAddProject, onU
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {projects.map((project) => {
-              const owner = team.find(t => t.id === project.ownerId);
-              return (
-                <tr key={project.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${getCategoryColor(project.category)}`}></div>
-                      <div>
-                        <p className="font-bold text-gray-900">{project.name}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{project.description}</p>
+            {filteredProjects.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-20 text-center text-gray-400 italic font-medium">
+                  No projects match the selected filters.
+                </td>
+              </tr>
+            ) : (
+              filteredProjects.map((project) => {
+                const owner = team.find(t => t.id === project.ownerId);
+                return (
+                  <tr key={project.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${getCategoryColor(project.category)}`}></div>
+                        <div>
+                          <p className="font-bold text-gray-900">{project.name}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{project.description}</p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 p-2 rounded-xl transition-colors">
-                      <img src={owner?.avatar} className="w-6 h-6 rounded-full border border-gray-200 shrink-0" alt="" />
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 p-2 rounded-xl transition-colors">
+                        <img src={owner?.avatar} className="w-6 h-6 rounded-full border border-gray-200 shrink-0" alt="" />
+                        <select
+                          value={project.ownerId}
+                          onChange={(e) => onUpdateProject(project.id, { ownerId: e.target.value })}
+                          className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer appearance-none pr-1"
+                        >
+                          {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className={`text-[10px] font-black text-white px-2 py-1 rounded-md ${getCategoryColor(project.category)}`}>
+                        {project.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <div className="text-xs text-gray-600 font-medium">
+                        <p className="font-bold">{project.startDate}</p>
+                        <p className="text-gray-400 text-[10px]">to {project.endDate}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-right">
                       <select
-                        value={project.ownerId}
-                        onChange={(e) => onUpdateProject(project.id, { ownerId: e.target.value })}
-                        className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer appearance-none pr-1"
+                        value={project.status}
+                        onChange={(e) => onUpdateProject(project.id, { status: e.target.value as ProjectStatus })}
+                        className={`text-[11px] font-black px-3 py-2 rounded-xl border-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none text-black ${getStatusColor(project.status)}`}
                       >
-                        {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {Object.values(ProjectStatus).map(s => <option key={s} value={s} className="text-black">{s}</option>)}
                       </select>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <span className={`text-[10px] font-black text-white px-2 py-1 rounded-md ${getCategoryColor(project.category)}`}>
-                      {project.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <div className="text-xs text-gray-600 font-medium">
-                      <p className="font-bold">{project.startDate}</p>
-                      <p className="text-gray-400 text-[10px]">to {project.endDate}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <select
-                      value={project.status}
-                      onChange={(e) => onUpdateProject(project.id, { status: e.target.value as ProjectStatus })}
-                      className={`text-[11px] font-black px-3 py-2 rounded-xl border-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none text-black ${getStatusColor(project.status)}`}
-                    >
-                      {Object.values(ProjectStatus).map(s => <option key={s} value={s} className="text-black">{s}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              )
-            })}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
       </div>
